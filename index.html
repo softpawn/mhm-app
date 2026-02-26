@@ -325,7 +325,6 @@
       <div class="logo">🍳 뭐해먹냐?</div>
       <div class="header-actions">
         <button class="icon-btn" onclick="resetAll()" title="리셋">🔄</button>
-        <button class="icon-btn" onclick="resetAll()" title="초기화">🔄</button>
         <button class="icon-btn" onclick="showHistory()" title="히스토리">📋</button>
         <button class="icon-btn" onclick="showSettings()" title="설정">⚙️</button>
       </div>
@@ -356,7 +355,10 @@
 
     <!-- 냉장실 -->
     <div class="card">
-      <div class="card-title">🧊 냉장실 재료 <span class="selected-count" id="cold-count"></span></div>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>🧊 냉장실 재료 <span class="selected-count" id="cold-count"></span></span>
+        <button onclick="resetZone('cold')" style="font-size:0.75rem;padding:3px 10px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--gray);cursor:pointer;">초기화</button>
+      </div>
       <div class="fridge-section">
         <div class="ingredient-grid" id="cold-grid"></div>
         <div class="add-ingredient-row">
@@ -368,7 +370,10 @@
 
     <!-- 냉동실 -->
     <div class="card">
-      <div class="card-title">❄️ 냉동실 재료 <span class="selected-count" id="freeze-count"></span></div>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>❄️ 냉동실 재료 <span class="selected-count" id="freeze-count"></span></span>
+        <button onclick="resetZone('freeze')" style="font-size:0.75rem;padding:3px 10px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--gray);cursor:pointer;">초기화</button>
+      </div>
       <div class="fridge-section">
         <div class="ingredient-grid" id="freeze-grid"></div>
         <div class="add-ingredient-row">
@@ -379,7 +384,7 @@
     </div>
 
     <!-- CTA -->
-    <button class="cta-btn" id="suggest-btn" onclick="getSuggestions()">
+    <button class="cta-btn" id="suggest-btn" onclick="confirmMealTime()">
       오늘 뭐 해먹을까? 🤔<br>
       <span class="btn-sub">재료 선택 후 눌러봐</span>
     </button>
@@ -475,15 +480,18 @@ function loadState() {
   } catch(e) {}
 }
 
-function resetAll() {
-  if (!confirm('선택한 재료를 모두 초기화할까?')) return;
-  state.coldSelected = [];
-  state.freezeSelected = [];
-  state.coldCustom = [];
-  state.freezeCustom = [];
+function resetZone(zone) {
+  if (zone === 'cold') {
+    state.coldSelected = [];
+    state.coldCustom = [];
+    showToast('🧊 냉장실 초기화됐어!');
+  } else {
+    state.freezeSelected = [];
+    state.freezeCustom = [];
+    showToast('❄️ 냉동실 초기화됐어!');
+  }
   renderIngredients();
   saveState();
-  showToast('✅ 초기화됐어!');
 }
 
 function saveState() {
@@ -697,8 +705,22 @@ const RECIPES = [
   { name:'닭볶음', emoji:'🍗', type:'세트', time:'30분', difficulty:'보통', mealTypes:['점심','저녁'], ingredients:['냉동닭','감자','양파','고추장'], steps:['닭 해동해서 손질해줘','고추장 양념 만들어줘','감자, 양파와 함께 졸여줘'] },
 ];
 
-// ── SUGGESTION ENGINE ──
-function getSuggestions() {
+// ── MEAL TIME CONFIRM ──
+function confirmMealTime() {
+  const current = state.mealType;
+  const options = ['아침','점심','저녁','간식','야식','술안주'];
+  const emojis = {'아침':'🌅','점심':'☀️','저녁':'🌙','간식':'🍪','야식':'🌃','술안주':'🍺'};
+  
+  const msg = `지금 ${emojis[current]} ${current} 맞아?\n아니면 위에서 다시 선택해줘!`;
+  if (confirm(msg)) {
+    getSuggestions();
+  }
+}
+
+// ── API SUGGESTION ──
+const API_KEY = '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';
+
+async function getSuggestions() {
   const allIngredients = [...state.coldSelected, ...state.freezeSelected];
   if (allIngredients.length === 0) {
     showToast('재료를 하나라도 골라봐! 🥕');
@@ -707,38 +729,81 @@ function getSuggestions() {
 
   showView('result-view');
   document.getElementById('result-title').textContent = `${state.mealType} 추천 메뉴 🍽️`;
+  document.getElementById('result-content').innerHTML = `
+    <div class="loading-wrap">
+      <div class="loading-pot">🍳</div>
+      <div class="loading-text">AI가 메뉴 생각 중<span class="loading-dots"></span></div>
+    </div>
+  `;
 
-  const recentNames = state.history.slice(-10).map(h => h.name);
+  const recentHistory = state.history.slice(-10).map(h => h.name).join(', ');
 
-  // 재료 매칭 - 레시피 재료가 모두 선택한 재료 안에 있어야 함
-  const scored = RECIPES
-    .filter(r => r.mealTypes.includes(state.mealType))
-    .filter(r => !recentNames.includes(r.name))
-    .map(r => {
-      const matched = r.ingredients.filter(ing => allIngredients.includes(ing));
-      const missing = r.ingredients.filter(ing => !allIngredients.includes(ing));
-      const score = matched.length / r.ingredients.length;
-      return { ...r, score, matched, missing };
-    })
-    .filter(r => r.score >= 0.7)  // 70% 이상 보유시 추천
-    .sort((a, b) => b.score - a.score);
+  const prompt = `당신은 한국 가정식 요리 전문가야.
 
-  // 점수 같으면 랜덤 섞기
-  const top = scored.slice(0, 10);
-  top.sort(() => Math.random() - 0.5);
-  const results = top.slice(0, 3);
+사용자 정보:
+- 식사 종류: ${state.mealType}
+- 인원: ${state.persons}명
+- 냉장실 재료: ${state.coldSelected.join(', ') || '없음'}
+- 냉동실 재료: ${state.freezeSelected.join(', ') || '없음'}
+- 최근에 먹은 메뉴 (중복 피해야 함): ${recentHistory || '없음'}
 
-  if (results.length === 0) {
+위 재료로 만들 수 있는 메뉴 3가지를 추천해줘.
+- 반드시 선택된 재료만 사용해서 만들 수 있는 메뉴만 추천해
+- 단품이어도 되고, 세트여도 돼 (예: 김치볶음밥, 또는 밥+된장국+나물)
+- 조리법은 최대한 간단하게 (5단계 이하)
+- 최근 먹은 메뉴와 겹치지 않게
+- ${state.persons}명 기준 분량으로
+
+반드시 아래 JSON 형식으로만 응답해 (다른 텍스트 없이):
+{
+  "menus": [
+    {
+      "name": "메뉴 이름",
+      "emoji": "음식 이모지 1개",
+      "type": "단품 또는 세트",
+      "time": "조리시간 (예: 10분)",
+      "difficulty": "쉬움/보통",
+      "ingredients": ["사용재료1", "사용재료2"],
+      "steps": ["1단계", "2단계", "3단계"]
+    }
+  ]
+}`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-calls': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API 오류');
+    }
+
+    const data = await response.json();
+    const text = data.content[0].text;
+    const jsonMatch = text.match(/[\s\S]*}/);
+    if (!jsonMatch) throw new Error('응답 형식 오류');
+    const parsed = JSON.parse(jsonMatch[0]);
+    renderMenus(parsed.menus);
+
+  } catch (err) {
     document.getElementById('result-content').innerHTML = `
-      <div class="error-box" style="background:#FFF9F0;border-color:#FFE0B2;color:#E65100;">
-        🤔 선택한 재료로 만들 수 있는 메뉴가 없어<br>
-        <small>재료를 더 추가해봐!</small>
+      <div class="error-box">
+        😢 오류가 났어<br><small>${err.message}</small>
       </div>
     `;
-    return;
   }
-
-  renderMenus(results);
 }
 
 function renderMenus(menus) {
