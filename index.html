@@ -413,14 +413,37 @@
       <div class="result-title">⚙️ 설정</div>
       <button class="back-btn" onclick="goBack()">← 돌아가기</button>
     </div>
-    <div style="display:flex; flex-direction:column; gap:12px;">
-      <div class="card-title">Claude API Key</div>
-      <input class="api-input" id="api-key-input" type="password" placeholder="sk-ant-...">
-      <button class="cta-btn" onclick="saveApiKey()">저장</button>
-      <p style="font-size:0.78rem; color:var(--gray); line-height:1.6;">
-        API Key는 이 기기에만 저장돼. 외부로 전송되지 않아.<br>
-        <a href="https://console.anthropic.com" target="_blank" style="color:var(--orange);">Anthropic Console</a>에서 발급받을 수 있어.
-      </p>
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="card-title">🧊 냉장실 재료 추가</div>
+        <div style="display:flex; gap:8px;">
+          <input id="new-cold-input" type="text" placeholder="예: 두부, 고추장..."
+            style="flex:1; padding:10px 14px; border:1.5px solid var(--border); border-radius:12px; font-size:0.9rem; font-family:inherit;">
+          <button onclick="addCustomIngredient('cold')"
+            style="padding:10px 16px; background:var(--orange); color:#fff; border:none; border-radius:12px; font-weight:700; cursor:pointer;">추가</button>
+        </div>
+        <div id="custom-cold-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="card-title">❄️ 냉동실 재료 추가</div>
+        <div style="display:flex; gap:8px;">
+          <input id="new-freeze-input" type="text" placeholder="예: 냉동피자, 냉동고기..."
+            style="flex:1; padding:10px 14px; border:1.5px solid var(--border); border-radius:12px; font-size:0.9rem; font-family:inherit;">
+          <button onclick="addCustomIngredient('freeze')"
+            style="padding:10px 16px; background:var(--orange); color:#fff; border:none; border-radius:12px; font-weight:700; cursor:pointer;">추가</button>
+        </div>
+        <div id="custom-freeze-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div class="card-title">앱 정보</div>
+        <p style="font-size:0.82rem; color:var(--gray); line-height:1.6;">
+          🍳 뭐해먹냐? v2.0<br>냉장고 재료로 오늘 메뉴 추천 앱
+        </p>
+      </div>
+
     </div>
   </main>
 </div>
@@ -501,9 +524,18 @@ function saveState() {
 }
 
 // ── RENDER ──
+function getCustomItems(zone) {
+  const key = zone === 'cold' ? 'mhm_custom_cold' : 'mhm_custom_freeze';
+  return JSON.parse(localStorage.getItem(key) || '[]');
+}
+
 function renderIngredients() {
-  renderGrid('cold', COLD_INGREDIENTS, state.coldCustom, state.coldSelected);
-  renderGrid('freeze', FREEZE_INGREDIENTS, state.freezeCustom, state.freezeSelected);
+  const savedCold = getCustomItems('cold');
+  const savedFreeze = getCustomItems('freeze');
+  const allColdCustom = [...new Set([...state.coldCustom, ...savedCold])];
+  const allFreezeCustom = [...new Set([...state.freezeCustom, ...savedFreeze])];
+  renderGrid('cold', COLD_INGREDIENTS, allColdCustom, state.coldSelected);
+  renderGrid('freeze', FREEZE_INGREDIENTS, allFreezeCustom, state.freezeSelected);
   updateCounts();
 }
 
@@ -588,8 +620,56 @@ function showHistory() {
   showView('history-view');
 }
 
+function addCustomIngredient(zone) {
+  const inputId = zone === 'cold' ? 'new-cold-input' : 'new-freeze-input';
+  const input = document.getElementById(inputId);
+  const val = input.value.trim();
+  if (!val) return;
+
+  const key = zone === 'cold' ? 'mhm_custom_cold' : 'mhm_custom_freeze';
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  if (existing.includes(val)) { showToast('이미 있는 재료야!'); return; }
+
+  existing.push(val);
+  localStorage.setItem(key, JSON.stringify(existing));
+  input.value = '';
+  renderCustomIngredientList();
+  renderIngredients();
+  showToast(`✅ "${val}" 추가됐어!`);
+}
+
+function removeCustomIngredient(zone, name) {
+  const key = zone === 'cold' ? 'mhm_custom_cold' : 'mhm_custom_freeze';
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  const updated = existing.filter(i => i !== name);
+  localStorage.setItem(key, JSON.stringify(updated));
+  renderCustomIngredientList();
+  renderIngredients();
+  showToast(`🗑️ "${name}" 삭제됐어`);
+}
+
+function renderCustomIngredientList() {
+  ['cold','freeze'].forEach(zone => {
+    const key = zone === 'cold' ? 'mhm_custom_cold' : 'mhm_custom_freeze';
+    const listId = zone === 'cold' ? 'custom-cold-list' : 'custom-freeze-list';
+    const el = document.getElementById(listId);
+    if (!el) return;
+    const items = JSON.parse(localStorage.getItem(key) || '[]');
+    el.innerHTML = items.map(name => `
+      <span style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px;
+        background:var(--orange-pale); border:1.5px solid var(--orange); border-radius:20px;
+        font-size:0.82rem; color:var(--brown);">
+        ${name}
+        <button onclick="removeCustomIngredient('${zone}','${name}')"
+          style="background:none; border:none; cursor:pointer; color:var(--orange); font-weight:700; padding:0; font-size:0.9rem;">✕</button>
+      </span>
+    `).join('');
+  });
+}
+
 function showSettings() {
   showView('settings-view');
+  renderCustomIngredientList();
 }
 
 function resetAll() {
@@ -651,58 +731,1028 @@ function addToHistory(menu) {
 
 // ── RECIPE DATABASE ──
 const RECIPES = [
-  // 🍚 밥류
-  { name:'김치볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁','야식'], ingredients:['김치','밥(냉장)','계란','대파'], steps:['팬에 기름 두르고 김치를 볶아줘','밥을 넣고 함께 볶아줘','계란 프라이 올리고 대파 뿌려줘'] },
-  { name:'계란볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁','야식'], ingredients:['계란','밥(냉장)','대파','간장'], steps:['계란 풀어서 스크램블해줘','밥 넣고 간장 조금 넣어 볶아줘','대파 넣고 마무리'] },
-  { name:'참치마요 덮밥', emoji:'🐟', type:'단품', time:'5분', difficulty:'쉬움', mealTypes:['점심','저녁','야식'], ingredients:['참치캔','밥(냉장)','마요네즈','간장'], steps:['참치 기름 빼줘','마요네즈, 간장 섞어서 참치에 버무려줘','밥 위에 올려줘'] },
-  { name:'스팸 계란 덮밥', emoji:'🍱', type:'단품', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['스팸','계란','밥(냉장)','간장'], steps:['스팸 슬라이스해서 구워줘','계란 프라이 만들어줘','밥 위에 스팸, 계란 올리고 간장 뿌려줘'] },
-  { name:'냉동만두 덮밥', emoji:'🥟', type:'단품', time:'15분', difficulty:'쉬움', mealTypes:['점심','저녁','야식'], ingredients:['냉동만두','밥(냉장)','간장','고추장'], steps:['만두 에어프라이어나 팬에 구워줘','소스(간장+고추장+설탕) 만들어줘','밥 위에 만두 올리고 소스 뿌려줘'] },
 
-  // 🍜 면류
-  { name:'계란 라면', emoji:'🍜', type:'단품', time:'5분', difficulty:'쉬움', mealTypes:['점심','야식','간식'], ingredients:['계란','대파'], steps:['라면 끓여줘 (스프 먼저)','계란 넣고 1분 더 끓여줘','대파 썰어 올려줘'] },
-  { name:'김치 라면', emoji:'🍜', type:'단품', time:'7분', difficulty:'쉬움', mealTypes:['점심','야식'], ingredients:['김치','대파'], steps:['김치 살짝 볶아줘','물 붓고 라면 끓여줘','대파 올려줘'] },
-  { name:'스파게티', emoji:'🍝', type:'단품', time:'20분', difficulty:'보통', mealTypes:['점심','저녁'], ingredients:['베이컨','계란','양파','마늘'], steps:['파스타 삶아줘','베이컨, 양파, 마늘 볶아줘','계란+치즈 소스 만들어서 버무려줘'] },
-  { name:'냉동만두 국물', emoji:'🥟', type:'단품', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁','야식'], ingredients:['냉동만두','대파','간장'], steps:['물 끓여줘','만두 넣고 5분 끓여줘','간장, 대파 넣어줘'] },
+  // ─── 🍚 밥/덮밥류 ───
+  { name:'김치볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['김치','계란','대파'],
+    steps:['팬에 기름 두르고 김치 볶기','밥 넣고 함께 볶기','계란 프라이 올리고 대파 뿌리기'] },
 
-  // 🥘 찌개/국
-  { name:'김치찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움', mealTypes:['점심','저녁'], ingredients:['김치','돼지고기','두부','대파'], steps:['돼지고기 볶다가 김치 넣어줘','물 붓고 끓여줘','두부, 대파 넣고 5분 더 끓여줘'] },
-  { name:'된장찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['된장','두부','감자','애호박','대파'], steps:['감자, 애호박 썰어줘','물에 된장 풀어 끓여줘','두부, 채소 넣고 10분 끓여줘'] },
-  { name:'순두부찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['두부','계란','고추장','대파'], steps:['멸치육수나 물 끓여줘','고추장 풀고 두부 넣어줘','계란, 대파 넣고 마무리'] },
-  { name:'미역국', emoji:'🍲', type:'세트', time:'20분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['소고기','간장','마늘'], steps:['미역 불려줘','소고기 볶다가 미역 넣어줘','물 붓고 20분 끓여줘'] },
-  { name:'콩나물국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['콩나물','대파','마늘','간장'], steps:['콩나물 씻어줘','물 끓이다 콩나물 넣어줘','마늘, 간장, 대파 넣어줘'] },
-  { name:'참치찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움', mealTypes:['점심','저녁'], ingredients:['참치캔','김치','두부','대파'], steps:['김치 볶아줘','참치, 두부, 물 넣어줘','끓으면 대파 넣어줘'] },
+  { name:'참치마요 덮밥', emoji:'🐟', type:'단품', time:'5분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['참치캔','마요네즈','간장'],
+    steps:['참치 기름 빼기','마요네즈+간장 버무리기','밥 위에 올리기'] },
 
-  // 🥗 반찬
-  { name:'계란찜', emoji:'🥚', type:'반찬', time:'15분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['계란','대파'], steps:['계란 3개 풀어줘','소금, 물 넣고 섞어줘','뚝배기에 넣고 약불로 10분 쪄줘'] },
-  { name:'두부조림', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움', mealTypes:['점심','저녁'], ingredients:['두부','간장','고추','대파','마늘'], steps:['두부 썰어서 구워줘','간장+설탕+마늘 소스 만들어줘','소스에 조려줘'] },
-  { name:'감자조림', emoji:'🥔', type:'반찬', time:'20분', difficulty:'쉬움', mealTypes:['점심','저녁'], ingredients:['감자','간장','마늘'], steps:['감자 깍둑썰기 해줘','간장+설탕+물 넣어줘','약불에 졸여줘'] },
-  { name:'콩나물무침', emoji:'🌿', type:'반찬', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['콩나물','마늘','간장'], steps:['콩나물 데쳐줘','마늘, 간장, 참기름으로 무쳐줘'] },
-  { name:'시금치나물', emoji:'🥬', type:'반찬', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심','저녁'], ingredients:['시금치','마늘','간장'], steps:['시금치 데쳐줘','마늘, 간장, 참기름으로 무쳐줘'] },
-  { name:'어묵볶음', emoji:'🍢', type:'반찬', time:'10분', difficulty:'쉬움', mealTypes:['점심','저녁'], ingredients:['어묵','대파','간장','고추'], steps:['어묵 썰어줘','팬에 기름 두르고 볶아줘','간장, 설탕, 대파 넣고 마무리'] },
-  { name:'베이컨 볶음', emoji:'🥓', type:'반찬', time:'10분', difficulty:'쉬움', mealTypes:['아침','점심'], ingredients:['베이컨','양파','파프리카'], steps:['베이컨, 양파, 파프리카 썰어줘','팬에 볶아줘','소금, 후추로 간해줘'] },
+  { name:'스팸 계란 덮밥', emoji:'🍱', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['스팸','계란','간장'],
+    steps:['스팸 슬라이스해서 굽기','계란 프라이 만들기','밥 위에 올리고 간장 뿌리기'] },
 
-  // 🥞 아침 특화
-  { name:'계란 토스트', emoji:'🍳', type:'단품', time:'7분', difficulty:'쉬움', mealTypes:['아침','간식'], ingredients:['계란','햄'], steps:['계란 풀어서 스크램블해줘','햄 구워줘','빵에 올려줘'] },
-  { name:'스크램블 에그', emoji:'🥚', type:'단품', time:'5분', difficulty:'쉬움', mealTypes:['아침'], ingredients:['계란','우유'], steps:['계란+우유 섞어줘','약불에 천천히 저어주며 익혀줘','소금으로 간해줘'] },
-  { name:'햄 계란 프라이', emoji:'🍳', type:'단품', time:'5분', difficulty:'쉬움', mealTypes:['아침'], ingredients:['계란','햄'], steps:['팬에 햄 구워줘','계란 프라이 해줘','접시에 담아줘'] },
+  { name:'소고기 간장 덮밥', emoji:'🥩', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','간장','양파','마늘'],
+    steps:['소고기 간장+설탕 양념하기','양파 함께 볶기','밥 위에 올리기'] },
 
-  // 🍺 술안주
-  { name:'두부김치', emoji:'🍺', type:'안주', time:'15분', difficulty:'쉬움', mealTypes:['술안주'], ingredients:['두부','김치','돼지고기'], steps:['두부 구워줘','김치, 돼지고기 볶아줘','두부 옆에 볶은 김치 올려줘'] },
-  { name:'계란 후라이', emoji:'🍳', type:'안주', time:'5분', difficulty:'쉬움', mealTypes:['술안주','야식'], ingredients:['계란'], steps:['팬에 기름 두르고 계란 깨줘','반숙으로 익혀줘','소금, 후추 뿌려줘'] },
-  { name:'스팸 구이', emoji:'🥩', type:'안주', time:'7분', difficulty:'쉬움', mealTypes:['술안주','야식'], ingredients:['스팸'], steps:['스팸 슬라이스해줘','팬에 앞뒤로 구워줘','노릇하게 구우면 완성'] },
-  { name:'어묵탕', emoji:'🍢', type:'안주', time:'15분', difficulty:'쉬움', mealTypes:['술안주','야식'], ingredients:['어묵','대파','간장'], steps:['꼬치 어묵 손질해줘','물에 다시마 넣고 끓여줘','어묵, 대파, 간장 넣고 끓여줘'] },
-  { name:'냉동만두 튀김', emoji:'🥟', type:'안주', time:'10분', difficulty:'쉬움', mealTypes:['술안주','야식','간식'], ingredients:['냉동만두'], steps:['에어프라이어 or 팬에 기름 넣어줘','만두 넣고 바삭하게 구워줘','소스랑 먹어줘'] },
+  { name:'닭고기 덮밥', emoji:'🍗', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['닭고기','간장','마늘','양파'],
+    steps:['닭고기 한입 크기로 썰기','간장+마늘+설탕 양념해서 볶기','양파 넣고 함께 볶기','밥 위에 올리기'] },
 
-  // 🍪 간식
-  { name:'계란 프라이', emoji:'🍳', type:'간식', time:'5분', difficulty:'쉬움', mealTypes:['간식','야식'], ingredients:['계란'], steps:['팬 달궈줘','계란 깨서 넣어줘','취향대로 익혀줘'] },
-  { name:'두유', emoji:'🥛', type:'간식', time:'1분', difficulty:'쉬움', mealTypes:['아침','간식'], ingredients:['두유'], steps:['컵에 따라줘','차갑게 마셔줘'] },
-  { name:'요거트', emoji:'🫙', type:'간식', time:'1분', difficulty:'쉬움', mealTypes:['아침','간식'], ingredients:['요거트'], steps:['컵에 담아줘','과일이나 견과류 올려줘'] },
+  { name:'냉동야채 볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['냉동야채믹스','계란','간장'],
+    steps:['냉동야채 팬에 볶기','계란 넣고 스크램블','밥 넣고 간장으로 볶기'] },
 
-  // 🍲 냉동 활용
-  { name:'냉동새우 볶음', emoji:'🦐', type:'반찬', time:'10분', difficulty:'쉬움', mealTypes:['점심','저녁','술안주'], ingredients:['냉동새우','마늘','버터'], steps:['새우 해동해줘','버터에 마늘 볶다가 새우 넣어줘','소금, 후추로 간해줘'] },
-  { name:'냉동오징어 볶음', emoji:'🦑', type:'반찬', time:'15분', difficulty:'보통', mealTypes:['점심','저녁','술안주'], ingredients:['냉동오징어','고추장','양파','대파'], steps:['오징어 해동해서 손질해줘','고추장 양념 만들어줘','양파와 함께 볶아줘'] },
-  { name:'냉동야채 볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움', mealTypes:['점심','저녁','야식'], ingredients:['냉동야채믹스','계란','밥(냉장)','간장'], steps:['팬에 냉동야채 볶아줘','계란, 밥 넣고 볶아줘','간장으로 간해줘'] },
-  { name:'닭볶음', emoji:'🍗', type:'세트', time:'30분', difficulty:'보통', mealTypes:['점심','저녁'], ingredients:['냉동닭','감자','양파','고추장'], steps:['닭 해동해서 손질해줘','고추장 양념 만들어줘','감자, 양파와 함께 졸여줘'] },
+  { name:'햄 야채 볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','야식'],
+    ingredients:['햄','계란','당근','양파'],
+    steps:['햄, 당근, 양파 잘게 썰기','팬에 볶다 계란 넣기','밥 넣고 소금, 간장으로 간하기'] },
+
+  { name:'두부 된장 덮밥', emoji:'🟨', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['두부','된장','양파','대파'],
+    steps:['두부 깍둑썰어 굽기','된장+물+양파 소스 만들기','밥 위에 두부 올리고 소스 뿌리기'] },
+
+  { name:'계란 간장 덮밥', emoji:'🥚', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','야식'],
+    ingredients:['계란','간장','대파'],
+    steps:['계란 2개 프라이 반숙으로 만들기','간장+설탕 소스 끓이기','밥 위에 계란 올리고 소스+대파 뿌리기'] },
+
+  { name:'어묵 볶음밥', emoji:'🍢', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['어묵','김치','계란'],
+    steps:['어묵 잘게 썰어 볶기','김치 넣고 함께 볶기','밥+계란 넣고 볶기'] },
+
+  // ─── 🥘 찌개/국류 ───
+  { name:'김치찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['김치','돼지고기','두부','대파'],
+    steps:['돼지고기 볶다 김치 넣기','물 붓고 끓이기','두부+대파 넣고 5분 더 끓이기'] },
+
+  { name:'된장찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['된장','두부','감자','애호박','대파'],
+    steps:['감자+애호박 썰기','물에 된장 풀고 끓이기','두부+채소 넣고 10분 끓이기'] },
+
+  { name:'순두부찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['두부','계란','고추장','대파'],
+    steps:['육수 끓이기','고추장 풀고 두부 넣기','계란+대파 넣고 마무리'] },
+
+  { name:'참치찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['참치캔','김치','두부','대파'],
+    steps:['김치 볶기','참치+두부+물 넣기','끓으면 대파 넣기'] },
+
+  { name:'콩나물국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['콩나물','대파','마늘','간장'],
+    steps:['물 끓이기','콩나물 넣고 5분 끓이기','마늘+간장+대파 넣기'] },
+
+  { name:'미역국', emoji:'🍲', type:'세트', time:'25분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['소고기','간장','마늘'],
+    steps:['미역 불리기','소고기+참기름 볶다 미역 넣기','물 붓고 20분 끓이기'] },
+
+  { name:'계란국', emoji:'🍲', type:'세트', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['계란','대파','간장'],
+    steps:['육수 끓이기','계란 풀어서 넣기','대파+간장으로 간하기'] },
+
+  { name:'애호박 된장국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['애호박','된장','대파','마늘'],
+    steps:['애호박 반달썰기','물에 된장 풀기','애호박+마늘+대파 넣고 끓이기'] },
+
+  { name:'감자국', emoji:'🍲', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['감자','대파','된장'],
+    steps:['감자 깍둑썰기','물 끓이며 된장 풀기','감자+대파 넣고 15분 끓이기'] },
+
+  { name:'어묵탕', emoji:'🍢', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['저녁','술안주','야식'],
+    ingredients:['어묵','대파','간장'],
+    steps:['꼬치 어묵 손질','물+다시마 육수 끓이기','어묵+간장+대파 넣고 끓이기'] },
+
+  { name:'두부찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','고추장','양파','대파'],
+    steps:['두부 깍둑썰기','고추장 육수 끓이기','두부+양파+대파 넣고 끓이기'] },
+
+  { name:'냉동만두국', emoji:'🥟', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁','야식'],
+    ingredients:['냉동만두','계란','대파'],
+    steps:['물 끓이기','만두 넣고 5분 끓이기','계란+대파 넣기'] },
+
+  // ─── 🍜 면류 ───
+  { name:'계란 라면', emoji:'🍜', type:'단품', time:'5분', difficulty:'쉬움',
+    mealTypes:['점심','야식','간식'],
+    ingredients:['계란','대파'],
+    steps:['라면 끓이기','계란 넣고 1분','대파 올리기'] },
+
+  { name:'김치 라면', emoji:'🍜', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['김치','대파'],
+    steps:['김치 살짝 볶기','물 붓고 라면 끓이기','대파 올리기'] },
+
+  { name:'스팸 라면', emoji:'🍜', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['스팸','계란'],
+    steps:['라면 끓이기','스팸 썰어 넣기','계란 넣기'] },
+
+  { name:'카르보나라', emoji:'🍝', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['베이컨','계란','치즈','마늘'],
+    steps:['파스타 삶기','베이컨+마늘 볶기','계란+치즈 소스 만들어 버무리기'] },
+
+  { name:'토마토 파스타', emoji:'🍝', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['토마토','마늘','양파','베이컨'],
+    steps:['파스타 삶기','베이컨+마늘+양파 볶기','토마토 넣고 소스 만들기','버무리기'] },
+
+  { name:'냉동만두 볶음', emoji:'🥟', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','야식','간식','술안주'],
+    ingredients:['냉동만두'],
+    steps:['팬에 기름 두르기','만두 넣고 뚜껑 덮어 굽기','노릇하면 완성'] },
+
+  { name:'우동', emoji:'🍜', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['어묵','대파','간장'],
+    steps:['육수 끓이기','어묵+간장 넣기','대파 올리기'] },
+
+  // ─── 🥗 반찬류 ───
+  { name:'계란찜', emoji:'🥚', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['계란','대파'],
+    steps:['계란 3개 풀기','소금+물 넣고 섞기','뚝배기에 넣고 약불로 10분 찌기'] },
+
+  { name:'두부조림', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','간장','고추','대파','마늘'],
+    steps:['두부 썰어 굽기','간장+설탕+마늘 소스 만들기','소스에 조리기'] },
+
+  { name:'감자조림', emoji:'🥔', type:'반찬', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['감자','간장','마늘'],
+    steps:['감자 깍둑썰기','간장+설탕+물 넣기','약불에 졸이기'] },
+
+  { name:'콩나물무침', emoji:'🌿', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['콩나물','마늘','간장'],
+    steps:['콩나물 데치기','마늘+간장+참기름으로 무치기'] },
+
+  { name:'시금치나물', emoji:'🥬', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['시금치','마늘','간장'],
+    steps:['시금치 데치기','마늘+간장+참기름으로 무치기'] },
+
+  { name:'어묵볶음', emoji:'🍢', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['어묵','대파','간장','고추'],
+    steps:['어묵 썰기','팬에 볶기','간장+설탕+대파 넣기'] },
+
+  { name:'베이컨 볶음', emoji:'🥓', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['베이컨','양파','파프리카'],
+    steps:['재료 썰기','팬에 볶기','소금+후추로 간하기'] },
+
+  { name:'당근 라페', emoji:'🥕', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['당근','마늘'],
+    steps:['당근 채썰기','식초+설탕+소금 드레싱 만들기','버무려 냉장 30분 재우기'] },
+
+  { name:'애호박 볶음', emoji:'🥒', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['애호박','마늘','간장'],
+    steps:['애호박 반달썰기','마늘 볶다 애호박 넣기','간장+소금으로 간하기'] },
+
+  { name:'감자 계란 볶음', emoji:'🥔', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['감자','계란','양파'],
+    steps:['감자+양파 볶기','계란 넣고 스크램블하듯 볶기','소금으로 간하기'] },
+
+  { name:'스팸 구이', emoji:'🥩', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','술안주','야식'],
+    ingredients:['스팸'],
+    steps:['스팸 슬라이스','팬에 앞뒤로 굽기','노릇하면 완성'] },
+
+  { name:'햄 구이', emoji:'🍖', type:'반찬', time:'5분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['햄'],
+    steps:['햄 슬라이스','팬에 굽기'] },
+
+  { name:'버섯볶음', emoji:'🍄', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['버섯','마늘','간장','대파'],
+    steps:['버섯 손질','마늘 볶다 버섯 넣기','간장+대파로 마무리'] },
+
+  { name:'무생채', emoji:'🌿', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['무','고추','간장'],
+    steps:['무 채썰기','소금에 절이기','고추+간장+식초로 무치기'] },
+
+  { name:'오이무침', emoji:'🥒', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['오이','마늘','고추장'],
+    steps:['오이 어슷썰기','소금에 살짝 절이기','마늘+고추장+식초로 무치기'] },
+
+  { name:'파프리카 볶음', emoji:'🫑', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['파프리카','양파','간장'],
+    steps:['파프리카+양파 썰기','팬에 볶기','간장+소금으로 간하기'] },
+
+  { name:'깻잎 무침', emoji:'🌿', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['깻잎','간장','마늘'],
+    steps:['깻잎 씻기','간장+마늘+참기름 양념 만들기','버무리기'] },
+
+  // ─── 🍳 아침 특화 ───
+  { name:'스크램블 에그', emoji:'🥚', type:'단품', time:'5분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','우유'],
+    steps:['계란+우유 섞기','약불에 천천히 저어가며 익히기','소금으로 간하기'] },
+
+  { name:'계란 프라이', emoji:'🍳', type:'단품', time:'3분', difficulty:'쉬움',
+    mealTypes:['아침','간식','야식'],
+    ingredients:['계란'],
+    steps:['팬 달구기','계란 넣기','취향대로 익히기'] },
+
+  { name:'햄 계란 토스트', emoji:'🥪', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','햄'],
+    steps:['계란 스크램블 만들기','햄 굽기','빵에 올리기'] },
+
+  { name:'치즈 계란 토스트', emoji:'🧀', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','치즈'],
+    steps:['계란 프라이 만들기','치즈 올려 녹이기','빵에 올리기'] },
+
+  { name:'요거트 볼', emoji:'🫙', type:'단품', time:'2분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['요거트'],
+    steps:['요거트 그릇에 담기','과일이나 견과류 올리기'] },
+
+  { name:'두유 한 잔', emoji:'🥛', type:'단품', time:'1분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['두유'],
+    steps:['컵에 따르기','차갑게 마시기'] },
+
+  // ─── 🥟 냉동 활용 ───
+  { name:'냉동새우 버터볶음', emoji:'🦐', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['냉동새우','마늘'],
+    steps:['새우 해동','버터+마늘 볶기','새우 넣고 볶기','소금+후추 간하기'] },
+
+  { name:'냉동오징어 볶음', emoji:'🦑', type:'반찬', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['냉동오징어','고추장','양파','대파'],
+    steps:['오징어 해동+손질','고추장 양념 만들기','양파+오징어 볶기','대파 넣기'] },
+
+  { name:'냉동닭 간장찜', emoji:'🍗', type:'세트', time:'30분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동닭','간장','감자','양파','마늘'],
+    steps:['닭 해동+손질','간장+마늘 양념 만들기','감자+양파와 함께 조리기'] },
+
+  { name:'냉동닭 고추장볶음', emoji:'🍗', type:'세트', time:'25분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동닭','고추장','마늘','대파'],
+    steps:['닭 해동+손질','고추장 양념 만들기','팬에 볶기','대파 넣기'] },
+
+  { name:'냉동떡볶이', emoji:'🍡', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','간식','야식'],
+    ingredients:['냉동떡','고추장','대파'],
+    steps:['떡 해동','고추장+설탕+물 소스 끓이기','떡 넣고 조리기','대파 올리기'] },
+
+  { name:'냉동고기 된장볶음', emoji:'🥩', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동고기','된장','양파','마늘'],
+    steps:['고기 해동','된장+마늘 양념','양파+고기 볶기'] },
+
+  // ─── 🍺 술안주 ───
+  { name:'두부김치', emoji:'🍺', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주'],
+    ingredients:['두부','김치','돼지고기'],
+    steps:['두부 굽기','김치+돼지고기 볶기','두부 옆에 볶은 김치 올리기'] },
+
+  { name:'계란말이', emoji:'🟡', type:'안주', time:'10분', difficulty:'보통',
+    mealTypes:['술안주','아침','점심'],
+    ingredients:['계란','당근','대파'],
+    steps:['계란 풀고 당근+대파 넣기','팬에 얇게 펴 익히기','돌돌 말기','썰기'] },
+
+  { name:'감자전', emoji:'🥔', type:'안주', time:'20분', difficulty:'보통',
+    mealTypes:['술안주','간식'],
+    ingredients:['감자','양파'],
+    steps:['감자+양파 갈기','소금으로 간하기','팬에 부치기'] },
+
+  { name:'김치전', emoji:'🥞', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주','간식'],
+    ingredients:['김치','양파'],
+    steps:['김치+양파 썰기','밀가루+물 반죽','팬에 부치기'] },
+
+  { name:'파전', emoji:'🥞', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주','간식'],
+    ingredients:['대파','계란'],
+    steps:['대파 어슷썰기','밀가루+계란+물 반죽','팬에 부치기'] },
+
+  { name:'두부 구이', emoji:'🟨', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주','점심','저녁'],
+    ingredients:['두부','간장','마늘'],
+    steps:['두부 썰어 소금 뿌리기','팬에 굽기','간장+마늘 소스 뿌리기'] },
+
+  { name:'오이 소박이', emoji:'🥒', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주','점심','저녁'],
+    ingredients:['오이','고추','마늘'],
+    steps:['오이 칼집 내기','고추+마늘 양념 만들기','오이에 양념 채우기'] },
+
+  { name:'냉동만두 군만두', emoji:'🥟', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주','야식','간식'],
+    ingredients:['냉동만두'],
+    steps:['팬에 기름 두르기','만두 넣고 물 조금 붓기','뚜껑 덮고 굽기','바삭하게 마무리'] },
+
+  // ─── 🍪 간식 ───
+  { name:'계란 토스트', emoji:'🍳', type:'간식', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','햄'],
+    steps:['계란 프라이 만들기','햄 굽기','빵에 올리기'] },
+
+  { name:'치즈 토스트', emoji:'🧀', type:'간식', time:'5분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['치즈'],
+    steps:['빵에 치즈 올리기','팬에 굽거나 전자렌지 1분','노릇하면 완성'] },
+
+  { name:'바나나 우유', emoji:'🥛', type:'간식', time:'2분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['우유'],
+    steps:['우유 붓기','취향에 따라 바나나 갈아 넣기'] },
+
+  { name:'냉동만두 에어프라이', emoji:'🥟', type:'간식', time:'12분', difficulty:'쉬움',
+    mealTypes:['간식','야식'],
+    ingredients:['냉동만두'],
+    steps:['에어프라이어 180도 예열','만두 넣기','12분 구우면 완성'] },
+
+  { name:'스팸 주먹밥', emoji:'🍙', type:'간식', time:'10분', difficulty:'쉬움',
+    mealTypes:['간식','야식'],
+    ingredients:['스팸','간장'],
+    steps:['스팸 잘게 썰어 굽기','밥에 스팸+간장 섞기','손으로 뭉치기'] },
+
+  { name:'참치 주먹밥', emoji:'🍙', type:'간식', time:'7분', difficulty:'쉬움',
+    mealTypes:['간식','야식'],
+    ingredients:['참치캔','마요네즈'],
+    steps:['참치 기름 빼기','마요네즈 버무리기','밥에 섞어 뭉치기'] },
+
+  // ─── 🌃 야식 특화 ───
+  { name:'라볶이', emoji:'🍜', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['야식','간식'],
+    ingredients:['냉동떡','고추장','어묵'],
+    steps:['고추장 소스 끓이기','떡+어묵 넣기','라면 사리 넣고 끓이기'] },
+
+  { name:'소고기 미역국', emoji:'🍲', type:'세트', time:'25분', difficulty:'쉬움',
+    mealTypes:['아침','저녁'],
+    ingredients:['소고기','간장','마늘'],
+    steps:['소고기 볶기','미역 넣고 볶기','물 붓고 20분 끓이기'] },
+
+  { name:'감자 스프', emoji:'🥔', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['아침','점심'],
+    ingredients:['감자','양파','우유'],
+    steps:['감자+양파 볶기','우유 붓고 끓이기','믹서에 갈기','소금으로 간하기'] },
+
+  { name:'냉동새우 볶음밥', emoji:'🦐', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['냉동새우','계란','대파'],
+    steps:['새우 해동','팬에 볶기','계란+밥+대파 넣고 볶기'] },
+
+  { name:'소고기 볶음', emoji:'🥩', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','간장','마늘','양파'],
+    steps:['소고기 간장+마늘 양념','팬에 볶기','양파 넣고 함께 볶기'] },
+
+  { name:'토마토 계란볶음', emoji:'🍅', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['토마토','계란','마늘'],
+    steps:['토마토 썰기','계란 풀기','마늘 볶다 토마토+계란 넣고 볶기'] },
+
+  { name:'버섯 계란 볶음', emoji:'🍄', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['버섯','계란','마늘'],
+    steps:['버섯 손질','마늘+버섯 볶기','계란 넣고 스크램블'] },
+
+  { name:'돼지고기 된장볶음', emoji:'🥩', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['돼지고기','된장','양파','마늘'],
+    steps:['돼지고기+된장+마늘 양념','팬에 볶기','양파 넣기'] },
+
+  { name:'닭고기 간장조림', emoji:'🍗', type:'반찬', time:'25분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['닭고기','간장','마늘','감자'],
+    steps:['닭고기 손질','간장+마늘 양념','감자 넣고 조리기'] },
+
+  { name:'두부 스크램블', emoji:'🟨', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['두부','계란','대파'],
+    steps:['두부 으깨기','계란 풀기','팬에 함께 볶다 대파 넣기'] },
+
+  { name:'양파 볶음', emoji:'🧅', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['양파','간장'],
+    steps:['양파 채썰기','팬에 볶기','간장+설탕으로 간하기'] },
+
+  { name:'고추 된장무침', emoji:'🌶', type:'반찬', time:'5분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['고추','된장'],
+    steps:['고추 썰기','된장+참기름으로 무치기'] },
+
+  { name:'돼지고기 김치볶음', emoji:'🥩', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['돼지고기','김치','대파'],
+    steps:['돼지고기 썰기','팬에 돼지고기 볶기','김치+대파 넣고 볶기'] },
+
+  { name:'냉동옥수수 버터볶음', emoji:'🌽', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','간식'],
+    ingredients:['냉동옥수수'],
+    steps:['팬에 버터 녹이기','옥수수 넣고 볶기','소금으로 간하기'] },
+
+  { name:'참치 김치볶음', emoji:'🐟', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['참치캔','김치','양파'],
+    steps:['양파 볶기','김치+참치 넣고 함께 볶기'] },
+
+  { name:'스팸 김치볶음', emoji:'🥩', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['스팸','김치'],
+    steps:['스팸 깍둑썰기','팬에 볶기','김치 넣고 함께 볶기'] },
+
+  { name:'달걀 장조림', emoji:'🥚', type:'반찬', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['계란','간장','마늘'],
+    steps:['계란 삶기','간장+설탕+마늘 소스 끓이기','계란 넣고 조리기'] },
+
+  { name:'감자 볶음', emoji:'🥔', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['감자','양파','간장'],
+    steps:['감자 채썰기','물에 담가 전분 빼기','팬에 양파+감자 볶기','간장으로 간하기'] },
+
+  { name:'무 볶음', emoji:'🌿', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['무','간장','마늘','대파'],
+    steps:['무 채썰기','팬에 볶기','간장+마늘+대파로 간하기'] },
+
+  { name:'냉동새우 계란볶음', emoji:'🦐', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동새우','계란','대파'],
+    steps:['새우 해동','계란 풀기','팬에 새우+계란 볶다 대파 올리기'] },
+
+  { name:'닭고기 야채볶음', emoji:'🍗', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['닭고기','양파','당근','마늘'],
+    steps:['닭+야채 썰기','마늘 볶다 닭 넣기','당근+양파 넣고 볶기','소금으로 간하기'] },
+
+  { name:'두부 야채볶음', emoji:'🟨', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','당근','양파','간장'],
+    steps:['두부+야채 썰기','팬에 볶기','간장으로 간하기'] },
+
+  { name:'소고기 야채볶음', emoji:'🥩', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','당근','양파','간장'],
+    steps:['재료 썰기','소고기 볶기','야채 넣고 간장으로 볶기'] },
+
+  { name:'오징어 볶음', emoji:'🦑', type:'반찬', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['냉동오징어','고추장','양파','대파'],
+    steps:['오징어 해동+손질','고추장 양념 만들기','양파+오징어 볶기','대파 올리기'] },
+
+  { name:'베이컨 야채볶음', emoji:'🥓', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['베이컨','양파','파프리카','마늘'],
+    steps:['재료 썰기','마늘+베이컨 볶기','야채 넣고 볶기','소금+후추 간하기'] },
+
+
+  // ─── 추가 3개 ───
+  { name:'계란 볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁','야식'],
+    ingredients:['계란','대파','간장'],
+    steps:['계란 스크램블 만들기','밥 넣고 볶기','간장+대파로 간하기'] },
+
+  { name:'치즈 계란찜', emoji:'🧀', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['계란','치즈','대파'],
+    steps:['계란 풀고 소금+물 넣기','뚝배기에 넣고 약불로 찌기','치즈+대파 올려 녹이기'] },
+
+  { name:'냉동고기 김치찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동고기','김치','두부','대파'],
+    steps:['고기 해동+볶기','김치 넣고 함께 볶기','물+두부 넣고 끓이기','대파 올리기'] },
+
+// ─── 추가 100개 ───
+
+  // 🍚 밥/덮밥 추가
+  { name:'오야코동', emoji:'🍱', type:'단품', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['닭고기','계란','양파','간장'],
+    steps:['닭고기+양파 간장으로 볶기','계란 풀어 반숙으로 올리기','밥 위에 올리기'] },
+
+  { name:'규동', emoji:'🥩', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','양파','간장'],
+    steps:['소고기+양파 간장+설탕+미림으로 조리기','밥 위에 올리기','생강 있으면 올리기'] },
+
+  { name:'마파두부 덮밥', emoji:'🌶', type:'단품', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','돼지고기','고추장','마늘','대파'],
+    steps:['돼지고기+마늘 볶기','두부 넣고 고추장 소스 만들기','대파 넣고 밥 위에 올리기'] },
+
+  { name:'나물 비빔밥', emoji:'🥗', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['시금치','콩나물','당근','계란','고추장'],
+    steps:['나물 각각 무치기','계란 프라이 만들기','밥에 나물+고추장 올려 비비기'] },
+
+  { name:'김치 참치 덮밥', emoji:'🐟', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['참치캔','김치','마요네즈'],
+    steps:['김치 볶기','참치+마요네즈 버무리기','밥 위에 올리기'] },
+
+  { name:'버섯 덮밥', emoji:'🍄', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['버섯','간장','마늘','양파'],
+    steps:['버섯+양파 볶기','간장+마늘 소스 만들기','밥 위에 올리기'] },
+
+  { name:'돼지고기 덮밥', emoji:'🥩', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['돼지고기','양파','간장','마늘'],
+    steps:['돼지고기+마늘 볶기','양파+간장 넣고 볶기','밥 위에 올리기'] },
+
+  { name:'김 계란 덮밥', emoji:'🥚', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','야식'],
+    ingredients:['계란','간장'],
+    steps:['계란 풀어 스크램블 만들기','간장+참기름 뿌리기','밥 위에 올리고 김 뿌리기'] },
+
+  { name:'새우 볶음밥', emoji:'🦐', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동새우','계란','대파','간장'],
+    steps:['새우 해동','팬에 새우 볶기','계란+밥+대파 넣고 간장으로 볶기'] },
+
+  { name:'오징어 덮밥', emoji:'🦑', type:'단품', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동오징어','고추장','양파','대파'],
+    steps:['오징어 해동+손질','고추장 양념 만들기','양파와 볶아 밥 위에 올리기'] },
+
+  // 🥘 찌개/국 추가
+  { name:'부대찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['스팸','햄','김치','두부','대파'],
+    steps:['스팸+햄 썰기','김치+두부 넣고 육수 끓이기','대파 올리기'] },
+
+  { name:'황태국', emoji:'🍲', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['계란','대파','마늘'],
+    steps:['황태 불리기','마늘 볶다 황태 넣기','물 붓고 끓이다 계란+대파 넣기'] },
+
+  { name:'닭개장', emoji:'🍲', type:'세트', time:'30분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동닭','고추','대파','마늘'],
+    steps:['닭 삶아 찢기','고추+마늘 양념 만들기','육수에 닭+대파 넣고 끓이기'] },
+
+  { name:'소고기 뭇국', emoji:'🍲', type:'세트', time:'25분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['소고기','무','대파','간장'],
+    steps:['소고기+무 볶기','물 붓고 끓이기','간장+대파 넣기'] },
+
+  { name:'버섯 된장국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['버섯','된장','두부','대파'],
+    steps:['육수 끓이기','된장 풀기','버섯+두부+대파 넣고 끓이기'] },
+
+  { name:'북어국', emoji:'🍲', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['계란','대파','마늘','간장'],
+    steps:['북어채 물에 불리기','마늘 볶다 북어 넣기','물 붓고 끓이다 계란+대파 넣기'] },
+
+  { name:'감자 된장국', emoji:'🍲', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['감자','된장','양파','대파'],
+    steps:['감자+양파 썰기','된장 풀고 끓이기','감자+대파 넣고 15분 끓이기'] },
+
+  { name:'두부 김치국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','김치','대파'],
+    steps:['김치 볶기','물 붓고 두부 넣기','대파 넣고 끓이기'] },
+
+  { name:'시금치 된장국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['시금치','된장','마늘','대파'],
+    steps:['육수 끓이기','된장 풀기','시금치+마늘+대파 넣고 끓이기'] },
+
+  { name:'냉동새우 된장국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동새우','된장','두부','대파'],
+    steps:['새우 해동','된장 육수 끓이기','새우+두부+대파 넣고 끓이기'] },
+
+  // 🍜 면류 추가
+  { name:'된장 라면', emoji:'🍜', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['된장','두부','대파'],
+    steps:['라면 끓이기','된장 풀기','두부+대파 넣기'] },
+
+  { name:'만두 라면', emoji:'🍜', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['냉동만두','계란','대파'],
+    steps:['라면 끓이기','만두 넣기','계란+대파 올리기'] },
+
+  { name:'버섯 라면', emoji:'🍜', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['버섯','계란','대파'],
+    steps:['라면 끓이기','버섯 넣기','계란+대파 올리기'] },
+
+  { name:'냉면 스타일 국수', emoji:'🍜', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['오이','당근','계란'],
+    steps:['국수 삶아 찬물에 헹구기','오이+당근 채썰기','계란 삶아 올리기','간장+식초 소스 만들기'] },
+
+  { name:'비빔국수', emoji:'🍜', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['오이','고추장','마늘'],
+    steps:['국수 삶아 찬물에 헹구기','고추장+마늘+참기름 양념 만들기','오이+양념으로 비비기'] },
+
+  { name:'간장 국수', emoji:'🍜', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','야식'],
+    ingredients:['대파','간장','마늘'],
+    steps:['국수 삶기','간장+마늘+참기름 양념 만들기','대파 올리기'] },
+
+  { name:'떡국', emoji:'🍲', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['냉동떡','계란','대파'],
+    steps:['육수 끓이기','떡 넣고 끓이기','계란 지단+대파 올리기'] },
+
+  { name:'오므라이스', emoji:'🍳', type:'단품', time:'15분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['계란','양파','당근','간장'],
+    steps:['야채 볶아 케첩 볶음밥 만들기','계란 얇게 펴 부치기','볶음밥 싸기','케첩 뿌리기'] },
+
+  // 🥗 반찬 추가
+  { name:'소고기 장조림', emoji:'🥩', type:'반찬', time:'40분', difficulty:'보통',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','간장','마늘','계란'],
+    steps:['소고기 삶기','간장+마늘+설탕 소스 만들기','소고기 넣고 조리기','계란 넣고 함께 조리기'] },
+
+  { name:'멸치볶음', emoji:'🐟', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['간장','마늘'],
+    steps:['멸치 팬에 볶기','간장+설탕+마늘 넣기','참기름 뿌리기'] },
+
+  { name:'김무침', emoji:'🌿', type:'반찬', time:'5분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['간장','마늘'],
+    steps:['김 잘게 부수기','간장+마늘+참기름으로 무치기'] },
+
+  { name:'두부 계란찜', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['두부','계란','대파'],
+    steps:['두부 으깨기','계란 풀어 두부와 섞기','뚝배기에 넣고 찌기','대파 올리기'] },
+
+  { name:'콩나물 볶음', emoji:'🌿', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['콩나물','마늘','간장'],
+    steps:['팬에 기름 두르기','콩나물 볶기','마늘+간장으로 간하기'] },
+
+  { name:'당근 볶음', emoji:'🥕', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['당근','마늘'],
+    steps:['당근 채썰기','마늘 볶다 당근 넣기','소금으로 간하기'] },
+
+  { name:'호박전', emoji:'🥒', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['애호박','계란'],
+    steps:['애호박 동그랗게 썰기','소금 뿌려 절이기','계란 입혀 팬에 부치기'] },
+
+  { name:'두부전', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['두부','계란'],
+    steps:['두부 썰어 소금 뿌리기','계란 입히기','팬에 노릇하게 부치기'] },
+
+  { name:'어묵 계란 볶음', emoji:'🍢', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['어묵','계란','대파'],
+    steps:['어묵 썰기','팬에 볶다 계란 넣기','대파 올리기'] },
+
+  { name:'감자 스팸 볶음', emoji:'🥔', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['감자','스팸'],
+    steps:['감자+스팸 깍둑썰기','팬에 볶기','소금+후추 간하기'] },
+
+  { name:'양파 계란 볶음', emoji:'🧅', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['양파','계란'],
+    steps:['양파 채썰기','팬에 볶다 계란 넣기','소금으로 간하기'] },
+
+  { name:'김치 계란찜', emoji:'🥚', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['김치','계란','대파'],
+    steps:['계란 풀기','김치 잘게 썰어 넣기','뚝배기에 찌기','대파 올리기'] },
+
+  { name:'참치 마요 계란볶음', emoji:'🐟', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['참치캔','계란','마요네즈'],
+    steps:['참치 기름 빼기','계란 풀어 스크램블 만들기','참치+마요네즈 섞어 올리기'] },
+
+  { name:'베이컨 계란말이', emoji:'🥓', type:'반찬', time:'10분', difficulty:'보통',
+    mealTypes:['아침','점심','술안주'],
+    ingredients:['베이컨','계란','당근'],
+    steps:['계란 풀기','당근 잘게 썰어 넣기','베이컨 올리고 돌돌 말기','썰기'] },
+
+  { name:'스팸 계란볶음', emoji:'🥩', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['스팸','계란','대파'],
+    steps:['스팸 깍둑썰기','팬에 볶기','계란+대파 넣고 볶기'] },
+
+  { name:'감자 베이컨 볶음', emoji:'🥔', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['감자','베이컨','양파'],
+    steps:['감자+베이컨+양파 썰기','팬에 볶기','소금+후추 간하기'] },
+
+  { name:'두부 스팸 조림', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','스팸','간장'],
+    steps:['두부+스팸 썰기','팬에 굽기','간장+설탕 소스로 조리기'] },
+
+  { name:'오이 계란볶음', emoji:'🥒', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['오이','계란','마늘'],
+    steps:['오이 어슷썰기','마늘 볶다 오이 넣기','계란 넣고 볶기','소금 간하기'] },
+
+  { name:'무 계란국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['무','계란','대파','간장'],
+    steps:['무 나박썰기','물 끓이며 무 넣기','계란 풀어 넣기','간장+대파 올리기'] },
+
+  { name:'버섯 계란국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['버섯','계란','대파','간장'],
+    steps:['버섯 손질','육수 끓이기','버섯 넣고 끓이기','계란+대파+간장 넣기'] },
+
+  // 🍳 아침 추가
+  { name:'프렌치 토스트', emoji:'🍞', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','우유'],
+    steps:['계란+우유 섞기','빵 담가 흠뻑 적시기','버터 팬에 노릇하게 굽기','시럽 뿌리기'] },
+
+  { name:'계란 샌드위치', emoji:'🥪', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란','마요네즈'],
+    steps:['계란 삶기','으깨서 마요네즈+소금 섞기','빵에 올리기'] },
+
+  { name:'햄치즈 샌드위치', emoji:'🥪', type:'단품', time:'5분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['햄','치즈'],
+    steps:['빵에 햄+치즈 올리기','팬에 구워주기'] },
+
+  { name:'베이컨 토스트', emoji:'🥓', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['베이컨','계란'],
+    steps:['베이컨 굽기','계란 프라이 만들기','빵에 올리기'] },
+
+  { name:'두유 스무디', emoji:'🥛', type:'단품', time:'3분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['두유','바나나'],
+    steps:['두유+바나나 믹서에 넣기','갈기','컵에 따르기'] },
+
+  { name:'계란 죽', emoji:'🍚', type:'단품', time:'20분', difficulty:'쉬움',
+    mealTypes:['아침'],
+    ingredients:['계란','간장','마늘'],
+    steps:['쌀 씻어 물 넣고 끓이기','계란 풀어 넣기','간장+마늘로 간하기'] },
+
+  { name:'두부 된장국 아침', emoji:'🍲', type:'세트', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침'],
+    ingredients:['두부','된장','대파'],
+    steps:['물 끓이기','된장 풀기','두부+대파 넣고 끓이기'] },
+
+  { name:'요거트 과일 볼', emoji:'🫙', type:'단품', time:'3분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['요거트','토마토'],
+    steps:['요거트 그릇에 담기','토마토 썰어 올리기','꿀 뿌리기'] },
+
+  // 🍺 술안주 추가
+  { name:'계란 장조림 안주', emoji:'🥚', type:'안주', time:'20분', difficulty:'쉬움',
+    mealTypes:['술안주'],
+    ingredients:['계란','간장','마늘'],
+    steps:['계란 삶기','간장+마늘+설탕 소스 끓이기','계란 넣고 조리기'] },
+
+  { name:'두부 조림 안주', emoji:'🟨', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주'],
+    ingredients:['두부','간장','고추','마늘'],
+    steps:['두부 굽기','간장+고추+마늘 소스 만들기','소스에 조리기'] },
+
+  { name:'감자전 안주', emoji:'🥔', type:'안주', time:'20분', difficulty:'보통',
+    mealTypes:['술안주'],
+    ingredients:['감자','양파','계란'],
+    steps:['감자+양파 갈기','계란 넣고 반죽','팬에 부치기'] },
+
+  { name:'어묵 꼬치 안주', emoji:'🍢', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주','야식'],
+    ingredients:['어묵','대파','간장'],
+    steps:['어묵 꼬치에 끼우기','육수 끓이기','간장+대파 넣기'] },
+
+  { name:'스팸 무스비', emoji:'🍙', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주','간식'],
+    ingredients:['스팸','간장'],
+    steps:['스팸 굽기','간장+설탕 소스 바르기','밥에 올려 김으로 감싸기'] },
+
+  { name:'냉동새우 칠리볶음', emoji:'🦐', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주','저녁'],
+    ingredients:['냉동새우','고추장','마늘'],
+    steps:['새우 해동','마늘 볶기','새우+고추장 넣고 볶기'] },
+
+  { name:'베이컨 말이', emoji:'🥓', type:'안주', time:'10분', difficulty:'쉬움',
+    mealTypes:['술안주'],
+    ingredients:['베이컨','파프리카'],
+    steps:['파프리카 막대 썰기','베이컨으로 감싸기','팬에 굽기'] },
+
+  { name:'치즈 계란 말이', emoji:'🧀', type:'안주', time:'10분', difficulty:'보통',
+    mealTypes:['술안주','아침'],
+    ingredients:['계란','치즈','대파'],
+    steps:['계란 풀고 대파 넣기','팬에 얇게 펴 치즈 올리기','돌돌 말기','썰기'] },
+
+  { name:'두부 김치볶음', emoji:'🥘', type:'안주', time:'15분', difficulty:'쉬움',
+    mealTypes:['술안주','저녁'],
+    ingredients:['두부','김치','돼지고기'],
+    steps:['두부 굽기','돼지고기+김치 볶기','두부 옆에 올리기'] },
+
+  { name:'오이 안주', emoji:'🥒', type:'안주', time:'5분', difficulty:'쉬움',
+    mealTypes:['술안주'],
+    ingredients:['오이','고추장','마늘'],
+    steps:['오이 막대썰기','고추장+마늘+식초 소스 만들기','찍어먹기'] },
+
+  // 🌃 야식 추가
+  { name:'스팸 계란 라이스', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['야식'],
+    ingredients:['스팸','계란','간장'],
+    steps:['스팸 굽기','계란 프라이 만들기','밥+간장+참기름 비비기','올리기'] },
+
+  { name:'냉동만두 에어프라이', emoji:'🥟', type:'단품', time:'12분', difficulty:'쉬움',
+    mealTypes:['야식','간식'],
+    ingredients:['냉동만두'],
+    steps:['에어프라이어 180도 예열','만두 넣기','12분 구우기'] },
+
+  { name:'참치 계란 덮밥', emoji:'🐟', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['야식','점심'],
+    ingredients:['참치캔','계란','간장'],
+    steps:['계란 프라이 만들기','참치 기름 빼기','밥에 올리고 간장 뿌리기'] },
+
+  { name:'두부 계란 볶음', emoji:'🟨', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['야식','점심'],
+    ingredients:['두부','계란','간장','대파'],
+    steps:['두부 으깨기','계란 풀기','팬에 함께 볶다 간장+대파 넣기'] },
+
+  { name:'어묵 볶음 야식', emoji:'🍢', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['야식','술안주'],
+    ingredients:['어묵','고추장','대파'],
+    steps:['어묵 썰기','고추장+간장으로 볶기','대파 올리기'] },
+
+  // 🥟 냉동 추가
+  { name:'냉동닭 오븐구이', emoji:'🍗', type:'세트', time:'30분', difficulty:'쉬움',
+    mealTypes:['저녁'],
+    ingredients:['냉동닭','마늘','간장'],
+    steps:['닭 해동','간장+마늘+올리브유 양념','오븐 200도 25분 굽기'] },
+
+  { name:'냉동새우 마늘구이', emoji:'🦐', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['저녁','술안주'],
+    ingredients:['냉동새우','마늘'],
+    steps:['새우 해동','마늘+버터 팬에 볶기','새우 넣고 굽기','소금+파슬리'] },
+
+  { name:'냉동오징어 된장볶음', emoji:'🦑', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동오징어','된장','양파','마늘'],
+    steps:['오징어 해동+손질','된장+마늘 양념 만들기','양파+오징어 볶기'] },
+
+  { name:'냉동떡 간장볶음', emoji:'🍡', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['간식','야식'],
+    ingredients:['냉동떡','간장'],
+    steps:['떡 해동','팬에 굽기','간장+설탕+참기름 버무리기'] },
+
+  { name:'냉동고기 된장찌개', emoji:'🥘', type:'세트', time:'20분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동고기','된장','두부','감자','대파'],
+    steps:['고기 해동+볶기','된장 풀기','두부+감자 넣고 끓이기','대파 올리기'] },
+
+  // 🥗 특별 반찬
+  { name:'아보카도 계란 토스트', emoji:'🥑', type:'단품', time:'7분', difficulty:'쉬움',
+    mealTypes:['아침','간식'],
+    ingredients:['계란'],
+    steps:['계란 수란 만들기','빵 굽기','계란 올리고 소금+후추'] },
+
+  { name:'토마토 스크램블', emoji:'🍅', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['토마토','계란','마늘'],
+    steps:['토마토 깍둑썰기','마늘 볶다 토마토 넣기','계란 넣고 스크램블'] },
+
+  { name:'버섯 베이컨 볶음', emoji:'🍄', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','술안주'],
+    ingredients:['버섯','베이컨','마늘'],
+    steps:['버섯+베이컨 썰기','마늘 볶다 재료 넣기','소금+후추 간하기'] },
+
+  { name:'파프리카 계란볶음', emoji:'🫑', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['파프리카','계란','양파'],
+    steps:['파프리카+양파 썰기','팬에 볶다 계란 넣기','소금으로 간하기'] },
+
+  { name:'두부 스크램블 덮밥', emoji:'🟨', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['두부','계란','간장','대파'],
+    steps:['두부 으깨기','계란+간장 넣고 볶기','밥 위에 올리고 대파 뿌리기'] },
+
+  { name:'냉동옥수수 계란볶음', emoji:'🌽', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['냉동옥수수','계란'],
+    steps:['옥수수 팬에 볶기','계란 넣고 스크램블','소금으로 간하기'] },
+
+  { name:'참치 두부 덮밥', emoji:'🐟', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['참치캔','두부','간장','마요네즈'],
+    steps:['두부 굽기','참치+마요네즈+간장 버무리기','밥+두부+참치 올리기'] },
+
+  { name:'소고기 계란 덮밥', emoji:'🥩', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['소고기','계란','간장','양파'],
+    steps:['소고기+양파 간장으로 볶기','계란 반숙으로 올리기','밥 위에 올리기'] },
+
+  { name:'김치 계란볶음밥', emoji:'🍳', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심','야식'],
+    ingredients:['김치','계란','대파'],
+    steps:['김치 볶기','계란 스크램블 만들기','밥 넣고 대파와 함께 볶기'] },
+
+  { name:'버섯 볶음밥', emoji:'🍄', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['버섯','계란','간장','대파'],
+    steps:['버섯 볶기','계란+밥 넣고 볶기','간장+대파로 마무리'] },
+
+  { name:'베이컨 볶음밥', emoji:'🥓', type:'단품', time:'10분', difficulty:'쉬움',
+    mealTypes:['아침','점심'],
+    ingredients:['베이컨','계란','양파'],
+    steps:['베이컨+양파 볶기','계란+밥 넣고 볶기','소금+후추로 간하기'] },
+
+  { name:'돼지고기 볶음밥', emoji:'🥩', type:'단품', time:'12분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['돼지고기','김치','계란'],
+    steps:['돼지고기 볶기','김치 넣고 함께 볶기','계란+밥 넣고 볶기'] },
+
+  { name:'새우 마늘볶음', emoji:'🦐', type:'반찬', time:'10분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','술안주'],
+    ingredients:['냉동새우','마늘','대파'],
+    steps:['새우 해동','마늘+대파 볶기','새우 넣고 볶기','소금으로 간하기'] },
+
+  { name:'감자 수프', emoji:'🥔', type:'단품', time:'25분', difficulty:'보통',
+    mealTypes:['아침','점심'],
+    ingredients:['감자','양파','우유'],
+    steps:['감자+양파 볶기','우유+물 붓고 끓이기','블렌더로 갈기','소금으로 간하기'] },
+
+  { name:'냉동만두 찜', emoji:'🥟', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁','간식'],
+    ingredients:['냉동만두'],
+    steps:['찜기에 물 끓이기','만두 넣기','15분 찌기'] },
+
+  { name:'두부 강된장', emoji:'🟨', type:'반찬', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['두부','된장','양파','마늘','대파'],
+    steps:['두부+양파 깍둑썰기','된장+마늘 볶기','두부+양파 넣고 조리기','대파 올리기'] },
+
+  { name:'고추 계란볶음', emoji:'🌶', type:'반찬', time:'7분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['고추','계란','간장'],
+    steps:['고추 어슷썰기','팬에 볶기','계란 넣고 스크램블','간장으로 간하기'] },
+
+  { name:'양파 수프', emoji:'🧅', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['아침','점심'],
+    ingredients:['양파','우유'],
+    steps:['양파 채썰어 캐러멜라이즈','우유+물 붓고 끓이기','소금+후추로 간하기'] },
+
+  { name:'김치 수제비', emoji:'🥣', type:'단품', time:'20분', difficulty:'보통',
+    mealTypes:['점심','저녁','야식'],
+    ingredients:['김치','양파','대파'],
+    steps:['김치+양파 볶기','물 붓고 끓이기','반죽 뜯어 넣기','대파 올리기'] },
+
+  { name:'참치 야채죽', emoji:'🍚', type:'단품', time:'25분', difficulty:'쉬움',
+    mealTypes:['아침'],
+    ingredients:['참치캔','당근','양파','간장'],
+    steps:['당근+양파 잘게 썰기','쌀+물 넣고 끓이기','참치+야채 넣고 끓이기','간장으로 간하기'] },
+
+  { name:'소고기 야채죽', emoji:'🍚', type:'단품', time:'30분', difficulty:'쉬움',
+    mealTypes:['아침'],
+    ingredients:['소고기','당근','양파','간장'],
+    steps:['소고기+야채 잘게 썰기','참기름에 볶기','쌀+물 넣고 끓이기','간장으로 간하기'] },
+
+  { name:'냉동새우 볶음 덮밥', emoji:'🦐', type:'단품', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['냉동새우','양파','마늘','간장'],
+    steps:['새우 해동','마늘+양파 볶기','새우 넣고 간장으로 볶기','밥 위에 올리기'] },
+
+  { name:'스팸 두부 찌개', emoji:'🥘', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['점심','저녁'],
+    ingredients:['스팸','두부','대파','고추장'],
+    steps:['스팸+두부 썰기','고추장 육수 끓이기','재료 넣고 끓이기','대파 올리기'] },
+
+  { name:'버섯 두부 된장국', emoji:'🍲', type:'세트', time:'15분', difficulty:'쉬움',
+    mealTypes:['아침','점심','저녁'],
+    ingredients:['버섯','두부','된장','대파'],
+    steps:['버섯+두부 손질','된장 육수 끓이기','재료 넣고 끓이기','대파 올리기'] },
 ];
 
 // ── MEAL TIME CONFIRM ──
@@ -717,91 +1767,46 @@ function confirmMealTime() {
   }
 }
 
-// ── API SUGGESTION ──
-
-async function getSuggestions() {
+// ── SUGGESTION ENGINE ──
+function getSuggestions() {
   const allIngredients = [...state.coldSelected, ...state.freezeSelected];
   if (allIngredients.length === 0) {
     showToast('재료를 하나라도 골라봐! 🥕');
     return;
   }
 
-  if (!state.apiKey) {
-    showView('settings-view');
-    showToast('먼저 API Key를 설정해줘 🔑');
+  showView('result-view');
+  document.getElementById('result-title').textContent = `${state.mealType} 추천 메뉴 🍽️`;
+
+  const recentNames = state.history.slice(-10).map(h => h.name);
+
+  const scored = RECIPES
+    .filter(r => r.mealTypes.includes(state.mealType))
+    .filter(r => !recentNames.includes(r.name))
+    .map(r => {
+      const matched = r.ingredients.filter(ing => allIngredients.includes(ing));
+      const missing = r.ingredients.filter(ing => !allIngredients.includes(ing));
+      const score = matched.length / r.ingredients.length;
+      return { ...r, score, matched, missing };
+    })
+    .filter(r => r.score >= 0.7)
+    .sort((a, b) => b.score - a.score);
+
+  const top = scored.slice(0, 10);
+  top.sort(() => Math.random() - 0.5);
+  const results = top.slice(0, 3);
+
+  if (results.length === 0) {
+    document.getElementById('result-content').innerHTML = `
+      <div class="error-box" style="background:#FFF9F0;border-color:#FFE0B2;color:#E65100;">
+        🤔 선택한 재료로 만들 수 있는 메뉴가 없어<br>
+        <small>재료를 더 추가해봐!</small>
+      </div>
+    `;
     return;
   }
 
-  showView('result-view');
-  document.getElementById('result-title').textContent = `${state.mealType} 추천 메뉴 🍽️`;
-  document.getElementById('result-content').innerHTML = `
-    <div class="loading-wrap">
-      <div class="loading-pot">🍳</div>
-      <div class="loading-text">AI가 메뉴 생각 중<span class="loading-dots"></span></div>
-    </div>
-  `;
-
-  const recentHistory = state.history.slice(-10).map(h => h.name).join(', ');
-
-  const prompt = `당신은 한국 가정식 요리 전문가야.
-
-사용자 정보:
-- 식사 종류: ${state.mealType}
-- 인원: ${state.persons}명
-- 냉장실 재료: ${state.coldSelected.join(', ') || '없음'}
-- 냉동실 재료: ${state.freezeSelected.join(', ') || '없음'}
-- 최근에 먹은 메뉴 (중복 피해야 함): ${recentHistory || '없음'}
-
-위 재료로 만들 수 있는 메뉴 3가지를 추천해줘.
-- 반드시 선택된 재료만 사용해서 만들 수 있는 메뉴만 추천해
-- 단품이어도 되고, 세트여도 돼 (예: 김치볶음밥, 또는 밥+된장국+나물)
-- 조리법은 최대한 간단하게 (5단계 이하)
-- 최근 먹은 메뉴와 겹치지 않게
-- ${state.persons}명 기준 분량으로
-
-반드시 아래 JSON 형식으로만 응답해 (다른 텍스트 없이):
-{
-  "menus": [
-    {
-      "name": "메뉴 이름",
-      "emoji": "음식 이모지 1개",
-      "type": "단품 또는 세트",
-      "time": "조리시간 (예: 10분)",
-      "difficulty": "쉬움/보통",
-      "ingredients": ["사용재료1", "사용재료2"],
-      "steps": ["1단계", "2단계", "3단계"]
-    }
-  ]
-}`;
-
-  try {
-    const response = await fetch('https://summer-wood-cecf.softpawn.workers.dev/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || 'API 오류');
-    }
-
-    const data = await response.json();
-    const text = data.content[0].text;
-    const jsonMatch = text.match(/[\s\S]*}/);
-    if (!jsonMatch) throw new Error('응답 형식 오류');
-    const parsed = JSON.parse(jsonMatch[0]);
-    renderMenus(parsed.menus);
-
-  } catch (err) {
-    document.getElementById('result-content').innerHTML = `
-      <div class="error-box">
-        😢 오류가 났어<br><small>${err.message}</small>
-      </div>
-    `;
-  }
+  renderMenus(results);
 }
 
 function renderMenus(menus) {
